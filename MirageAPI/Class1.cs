@@ -5,9 +5,9 @@ using System.Text.Json.Serialization;
 using Newtonsoft.Json;
 using RestSharp;
 
-namespace MirageAPI;
+namespace Mirage;
 
-public static class MirageAPI
+public static class API
 {
     private static RestClient _client = new RestClient("https://api.mirageml.com/");
 
@@ -1011,7 +1011,7 @@ public static class MirageAPI
             public readonly string ApiKey;
             public readonly string AuthorizationToken;
 
-            SClientAuthorization(string apiKey, string authToken)
+            public SClientAuthorization(string apiKey, string authToken)
             {
                 ApiKey = apiKey;
                 AuthorizationToken = authToken;
