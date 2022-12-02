@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
 using Newtonsoft.Json;
@@ -961,6 +962,18 @@ public static class MirageAPI
             }
 
             #endregion
+        }
+
+        /// <summary>
+        /// Authorizes the user. If the request does not return a OK status, then we assume the client is not authorized
+        /// </summary>
+        /// <param name="authorization">Client Authorization</param>
+        /// <returns>True if  request returns OK</returns>
+        public static async Task<bool> AuthorizeUser(SClientAuthorization authorization)
+        {
+            RestRequest req = new RestRequest("/dreambooth/projects");
+            AddAuthHeaders(authorization, ref req);
+            return (await _client.GetAsync(req)).StatusCode == HttpStatusCode.OK;
         }
 
         /// <summary>
