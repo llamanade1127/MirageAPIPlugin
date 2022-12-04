@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
@@ -325,11 +326,14 @@ public static class API
             /// </summary>
             /// <param name="authorization">Authorization for the client</param>
             /// <returns></returns>
-            public static async Task<SGetProjects> GetProjects(SClientAuthorization authorization)
+            public static async Task<List<SGetProjects>> GetProjects(SClientAuthorization authorization)
             {
                 RestRequest req = new RestRequest("/dreambooth/projects");
                 AddAuthHeaders(authorization, ref req);
-                return await _client.GetAsync<SGetProjects>(req);
+                req.AddHeader("accept", "application/json");
+                var res = await _client.GetAsync<List<SGetProjects>>(req);
+                Debug.Assert(res != null, nameof(res) + " != null");
+                return res;
             }
 
             /// <summary>
@@ -1020,6 +1024,17 @@ public static class API
 
         #endregion
     }
+
+
+    //TODO: finish helper method
+    // private static async Task<T> GetRequestAndAttemptParse<T>(RestRequest req)
+    // {
+    //     var res = await _client.GetAsync(req);
+    //     if (res.StatusCode != HttpStatusCode.Accepted || res.StatusCode != HttpStatusCode.OK)
+    //     {
+    //         
+    //     }
+    // }
 }
 
 #if DEBUG
