@@ -2,6 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
 using System.Text.Json.Serialization;
 using Newtonsoft.Json;
 using RestSharp;
@@ -135,80 +136,93 @@ public static class API
 
     public static class Private
     {
+
+        private static bool _isAuthorized = false;
+        private static SClientAuthorization _authorization;
         public static class StableDiffusion
         {
             /// <summary>
             /// Returns an array of the stable diffusion projects created
             /// </summary>
-            ///<param name="authorization">Client authorization</param>
-            /// <exception cref="ArgumentException">Throws if either keys are empty or null</exception>
-            public static async Task<List<SGetProjects>> GetProjects(SClientAuthorization authorization)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<List<SGetProjects>> GetProjects()
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                
                 RestRequest req = new RestRequest("/stable-diffusion/projects")
                 {
                     Method = Method.Get
                 };
 
-                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
+                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Returns the stable diffusion project matching the projectId
             /// </summary>
-            /// <param name="authorization">Authorization of client</param>
             /// <param name="projectId">Project ID. Cannot be empty or null</param>
             /// <returns>Completed Request</returns>
             /// <exception cref="ArgumentException">Throws if any inputs are empty or null</exception>
-            public static async Task<SGetProject> GetProject(SClientAuthorization authorization, string projectId)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SGetProject> GetProject(string projectId)
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 if (projectId == String.Empty) throw new ArgumentException("projectId cannot be empty!");
                 RestRequest req = new RestRequest("/stable-diffusion/project") { Method = Method.Get };
                 req.AddQueryParameter("project-id", projectId);
-                return (SGetProject) (await MakeRequest<SGetProject, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
+                return (SGetProject) (await MakeRequest<SGetProject, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Creates a stable diffusion project.
             /// </summary>
-            /// <param name="authorization">Authorization of the client.</param>
             /// <returns>Completed request</returns>
-            public static async Task<SCreateProject> CreateProject(SClientAuthorization authorization)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SCreateProject> CreateProject()
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 RestRequest req = new RestRequest("/stable-diffusion/project") { Method = Method.Post };
-                return (SCreateProject)(await PostRequest<SCreateProject, Dreambooth.SCreateProjectError>(req, authorization) ?? throw new InvalidOperationException());
+                return (SCreateProject)(await PostRequest<SCreateProject, Dreambooth.SCreateProjectError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Gets a stable diffusion run. A run is an instance of a stable diffusion image generation. Returns the run data and generated images for the run.
             /// </summary>
-            /// <param name="authorization">Authorization for the client</param>
             /// <param name="runId">ID of the run</param>
             /// <returns>The run data and generated images for the run</returns>
-            public static async Task<SGetRun> GetRun(SClientAuthorization authorization, string runId)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SGetRun> GetRun(string runId)
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 if (runId == String.Empty) throw new ArgumentException("runId cannot be empty!");
 
                 RestRequest req = new RestRequest("/stable-diffusion/run") {Method = Method.Get};
                 req.AddParameter("run-id", runId);
-                return (SGetRun)((await MakeRequest<SGetRun, SDefaultError>(req, authorization)) ??
+                return (SGetRun)((await MakeRequest<SGetRun, SDefaultError>(req, _authorization)) ??
                                  throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Run stable diffusion image generation with the requested parameters
             /// </summary>
-            /// <param name="authorization">Authorization of client</param>
             /// <param name="body">Body which includes data for the run</param>
             /// <returns>Completed request</returns>
             /// <exception cref="ArgumentException">Throws if either input is null</exception>
-            public static async Task<SCreateRun> CreateRun(SClientAuthorization authorization, SCreateRunBody body)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SCreateRun> CreateRun(SCreateRunBody body)
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 if (body.Equals(null)) throw new ArgumentException("Body cannot be null!");
 
                 RestRequest req = new RestRequest("/stable-diffusion/run");
                 req.AddBody(body);
                 
-                return (SCreateRun) (await MakeRequest<SCreateRun, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
+                return (SCreateRun) (await MakeRequest<SCreateRun, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
 
@@ -326,70 +340,76 @@ public static class API
             /// <summary>
             /// Returns an array of the dreambooth projects
             /// </summary>
-            /// <param name="authorization">Authorization for the client</param>
-            /// <returns></returns>
-            public static async Task<List<SGetProjects>?> GetProjects(SClientAuthorization authorization)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<List<SGetProjects>?> GetProjects()
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 RestRequest req = new RestRequest("/dreambooth/projects");
-                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SGetProjects>(req, authorization))!;
+                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SGetProjects>(req, _authorization))!;
             }
 
             /// <summary>
             /// Returns the dreambooth project
             /// </summary>
-            /// <param name="authorization">Authorization of the client</param>
             /// <param name="projectId">Project ID to get</param>
             /// <returns>Completed request</returns>
             /// <exception cref="ArgumentException">Throws if project is null or empty</exception>
-            public static async Task<SGetProject?> GetProject(SClientAuthorization authorization, string projectId)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SGetProject?> GetProject(string projectId)
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 if (projectId == String.Empty) throw new ArgumentException("Project Id cannot be null or empty!");
-                RestRequest req = new RestRequest("/dreambooth/project");
+                RestRequest req = new RestRequest("/dreambooth/project") {Method = Method.Get};
                 req.AddQueryParameter("project-id", projectId);
-                return (SGetProject) (await MakeRequest<SGetProject, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
+                return (SGetProject) (await MakeRequest<SGetProject, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
                 
             }
 
             /// <summary>
             /// Creates a Dreambooth project
             /// </summary>
-            /// <param name="authorization">Authorization of the client</param>
             /// <param name="body">Body of post request</param>
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
             /// <returns>Completed request</returns>
-            public static async Task<SCreateProject?> CreateProject(SClientAuthorization authorization,
-                SCreateProjectBody body)
+            public static async Task<SCreateProject?> CreateProject(SCreateProjectBody body)
             {
-                RestRequest req = new RestRequest("/dreambooth/project");
-                AddAuthHeaders(authorization, ref req); 
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                RestRequest req = new RestRequest("/dreambooth/project") {Method = Method.Post};
                 body.AddDataToRequest(ref req);
-                return (SCreateProject) (await PostRequest<SCreateProject, SCreateProjectError>(req, authorization) ?? throw new InvalidOperationException());
+                return (SCreateProject) (await MakeRequest<SCreateProject, SCreateProjectError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Gets a dreambooth run. A run is an instance of a dreambooth image generation.
             /// Returns the run data and generated images for the run.
             /// </summary>
-            /// <param name="authorization">Client authorization</param>
             /// <param name="runId">The id of the run</param>
             /// <returns>Completed request</returns>
-            public static async Task<SGetRun> GetRun(SClientAuthorization authorization, string runId)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SGetRun> GetRun(string runId)
             {
-                RestRequest req = new RestRequest("/dreambooth/run");
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                RestRequest req = new RestRequest("/dreambooth/run") {Method = Method.Get};
                 req.AddQueryParameter("run-id", runId);
-                return (SGetRun)(await MakeRequest<SGetRun, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
+                return (SGetRun)(await MakeRequest<SGetRun, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Run dreambooth image generation with an optional initial image
             /// </summary>
-            /// <param name="authorization"></param>
-            /// <param name="body"></param>
-            /// <returns></returns>
-            public static async Task<SCreateRun> CreateRun(SClientAuthorization authorization, SCreateRunBody body)
+            /// <param name="body">Body of the image generation</param>
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SCreateRun> CreateRun(SCreateRunBody body)
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 RestRequest req = new RestRequest("/dreambooth/run") {Method = Method.Post};
                 req.AddBody(body);
-                return (SCreateRun) (await MakeRequest<SCreateRun, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
+                return (SCreateRun) (await MakeRequest<SCreateRun, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             #region structs
@@ -650,93 +670,93 @@ public static class API
             /// <summary>
             /// Returns an array of the texture mesh projects
             /// </summary>
-            /// <param name="authorization">Client Authorization</param>
             /// <param name="cursor">Starting cursor</param>
             /// <param name="sort">The sort direction. Enum: ascending, descending</param>
-            /// <returns></returns>
-            public static async Task<List<SGetProjects>> GetProjects(SClientAuthorization authorization, string cursor,
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<List<SGetProjects>> GetProjects( string cursor,
                 string sort = "descending")
             {
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
                 if (sort != "descending" || sort != "ascending")
                     throw new ArgumentException("Sort can only be either ascending or descending");
-                RestRequest req = new RestRequest("/texture-mesh/projects");
+                RestRequest req = new RestRequest("/texture-mesh/projects") { Method = Method.Get};
                 if (cursor != String.Empty) req.AddQueryParameter("cursor", cursor);
                 req.AddQueryParameter("sort", sort.ToString().ToLower());
                 
-                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SDefaultError>(req, authorization))! ?? throw new InvalidOperationException();
+                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SDefaultError>(req, _authorization))! ?? throw new InvalidOperationException();
             }
 
             /// <summary>
             /// Returns the texture mesh project
             /// </summary>
-            /// <param name="authorization">Authorization of the client</param>
             /// <param name="projectId">Id of the project</param>
-            /// <returns></returns>
-            public static async Task<SGetProject> GetProject(SClientAuthorization authorization, string projectId)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SGetProject> GetProject(string projectId)
             {
-                RestRequest req = new RestRequest("/texture-mesh/project");
-                AddAuthHeaders(authorization, ref req);
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                RestRequest req = new RestRequest("/texture-mesh/project") {Method = Method.Get};
                 req.AddQueryParameter("project-id", projectId);
 
-                return await Client.GetAsync<SGetProject>(req);
+                return (SGetProject) (await MakeRequest<SGetProject, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Create a mesh with prompt and mesh algorithm
             /// </summary>
-            /// <param name="authorization">Client authorization</param>
             /// <param name="prompt">The input prompt</param>
-            /// <returns></returns>
-            public static async Task<SCreateProject> CreateProject(SClientAuthorization authorization,
-                SCreateProjectBody prompt)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SCreateProject> CreateProject(SCreateProjectBody prompt)
             {
-                RestRequest req = new RestRequest("/texture-mesh/project/create");
-                AddAuthHeaders(authorization, ref req);
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                RestRequest req = new RestRequest("/texture-mesh/project/create") {Method = Method.Post};
                 req.AddBody(prompt);
-                return await Client.PostAsync<SCreateProject>(req);
+                return (SCreateProject) (await MakeRequest<SGetProject, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Create a mesh by uploading the .obj file
             /// </summary>
-            /// <param name="authorization">Authorization of client</param>
             /// <param name="body">Input prompt and files</param>
-            /// <returns></returns>
-            public static async Task<SCreateProject> UploadProject(SClientAuthorization authorization,
-                SUploadProjectBody body)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SCreateProject> UploadProject(SUploadProjectBody body)
             {
-                RestRequest req = new RestRequest("/texture-mesh/project/upload");
-                AddAuthHeaders(authorization, ref req);
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                RestRequest req = new RestRequest("/texture-mesh/project/upload") {Method = Method.Get};
                 req.AddBody(body);
-                return await Client.PostAsync<SCreateProject>(req);
+                return (SCreateProject) (await MakeRequest<SGetProject, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
             /// Gets a TextureMesh run. A run is an instance of a texture mesh creation. Returns the run data and generated textures.
             /// </summary>
-            /// <param name="authorization">Authorization of client</param>
             /// <param name="runId">The id of the run</param>
-            /// <returns></returns>
-            public static async Task<SGetRun> GetRun(SClientAuthorization authorization, string runId)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SGetRun> GetRun(string runId)
             {
-                RestRequest req = new RestRequest("/texture-mesh/run");
-                AddAuthHeaders(authorization, ref req);
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                RestRequest req = new RestRequest("/texture-mesh/run") {Method = Method.Get};
                 req.AddQueryParameter("run-id", runId);
-                return await Client.GetAsync<SGetRun>(req);
+                return (SGetRun) (await MakeRequest<SGetRun, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
+
             }
 
             /// <summary>
             /// Runs a texture generation task with the requested parameters. Will be associated with mesh created
             /// </summary>
-            /// <param name="authorization">Authorization of client</param>
             /// <param name="body">Body data</param>
-            /// <returns></returns>
-            public static async Task<SCreateRun> CreateRun(SClientAuthorization authorization, SCreateRunBody body)
+            /// <exception cref="AuthenticationException">Throws user is not authorized</exception>
+            /// <exception cref="HttpRequestException">Throws if request fails</exception>
+            public static async Task<SCreateRun> CreateRun(SCreateRunBody body)
             {
-                RestRequest req = new RestRequest("/texture-mesh/run");
-                AddAuthHeaders(authorization, ref req);
+                if (!_isAuthorized) throw new AuthenticationException("User is not authorized!");
+                RestRequest req = new RestRequest("/texture-mesh/run") {Method = Method.Post};
                 req.AddBody(body);
-                return await Client.PostAsync<SCreateRun>(req);
+                return (SCreateRun) (await MakeRequest<SCreateRun, SDefaultError>(req, _authorization) ?? throw new InvalidOperationException());
             }
 
             #region structs
@@ -1023,7 +1043,13 @@ public static class API
         {
             RestRequest req = new RestRequest("/dreambooth/projects");
             AddAuthHeaders(authorization, ref req);
-            return (await Client.GetAsync(req)).StatusCode == HttpStatusCode.OK;
+            if ((await Client.GetAsync(req)).StatusCode == HttpStatusCode.OK)
+            {
+                _authorization = authorization;
+                _isAuthorized = true;
+            }
+
+            return _isAuthorized;
         }
 
 
