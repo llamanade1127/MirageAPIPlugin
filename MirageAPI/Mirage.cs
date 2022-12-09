@@ -23,12 +23,13 @@ public static class API
         public static async Task<SPublicDataset?> PublicDataset([Optional] string page, [Optional] string filter,
             [Optional] string projectId)
         {
-            RestRequest req = new RestRequest("/texture-mesh/public-projects");
+            RestRequest req = new RestRequest("/texture-mesh/public-projects") {Method = Method.Get};
             if (page != String.Empty) req.AddQueryParameter("page", page);
             if (filter != String.Empty) req.AddQueryParameter("filter", filter);
-            if (projectId != String.Empty) req.AddQueryParameter("projectID", projectId);
-            var res = await Client.GetAsync<SPublicDataset>(req);
-            return res;
+            if (projectId != String.Empty) req.AddQueryParameter("project-id", projectId);
+            
+            return (SPublicDataset) (await MakeRequest<SPublicDataset, SDefaultError>(req,
+                new Private.SClientAuthorization()) ?? throw new InvalidOperationException());
         }
 
         /// <summary>
@@ -37,10 +38,10 @@ public static class API
         /// <param name="page">The page number, 30 assets per page</param>
         public static async Task<RGetPublicProjects?> GetPublicProjects([Optional] string page)
         {
-            RestRequest req = new RestRequest("/texture-mesh/public-projects");
+            RestRequest req = new RestRequest("/texture-mesh/public-projects") {Method = Method.Get};
             if (page != String.Empty) req.AddQueryParameter("page", page);
-            var res = await Client.GetAsync<RGetPublicProjects>(req);
-            return res;
+            return (RGetPublicProjects) (await MakeRequest<RGetPublicProjects, SDefaultError>(req,
+                new Private.SClientAuthorization()) ?? throw new InvalidOperationException());
         }
 
 
@@ -139,8 +140,7 @@ public static class API
             /// <summary>
             /// Returns an array of the stable diffusion projects created
             /// </summary>
-            /// <param name="authKey">Authorization Key</param>
-            /// <param name="apiKey">x-api-key</param>
+            ///<param name="authorization">Client authorization</param>
             /// <exception cref="ArgumentException">Throws if either keys are empty or null</exception>
             public static async Task<List<SGetProjects>> GetProjects(SClientAuthorization authorization)
             {
@@ -345,27 +345,8 @@ public static class API
             {
                 if (projectId == String.Empty) throw new ArgumentException("Project Id cannot be null or empty!");
                 RestRequest req = new RestRequest("/dreambooth/project");
-                AddAuthHeaders(authorization, ref req);
                 req.AddQueryParameter("project-id", projectId);
-                try
-                {
-                    var t = await Client.GetAsync(req);
-                    
-                    if (!t.IsSuccessful)
-                    {
-                        Debug.Write(t.StatusCode);
-                        return null;
-                    }
-                
-                    return JsonConvert.DeserializeObject<SGetProject>(t.Content);
-                }
-                catch (Exception e)
-                {
-                    Debug.Write(e);
-                    return null;
-                }
-
-
+                return (SGetProject) (await MakeRequest<SGetProject, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
                 
             }
 
@@ -381,11 +362,7 @@ public static class API
                 RestRequest req = new RestRequest("/dreambooth/project");
                 AddAuthHeaders(authorization, ref req); 
                 body.AddDataToRequest(ref req);
-
-
-               var d = (SCreateProject) (await PostRequest<SCreateProject, SCreateProjectError>(req, authorization) ?? throw new InvalidOperationException());
-               if (d.StatusCode == 500) throw new InvalidOperationException("Request returned a 500 error!" + d.Body);
-               return d;
+                return (SCreateProject) (await PostRequest<SCreateProject, SCreateProjectError>(req, authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
@@ -398,10 +375,8 @@ public static class API
             public static async Task<SGetRun> GetRun(SClientAuthorization authorization, string runId)
             {
                 RestRequest req = new RestRequest("/dreambooth/run");
-                AddAuthHeaders(authorization, ref req);
-
                 req.AddQueryParameter("run-id", runId);
-                return await Client.GetAsync<SGetRun>(req);
+                return (SGetRun)(await MakeRequest<SGetRun, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
@@ -412,10 +387,9 @@ public static class API
             /// <returns></returns>
             public static async Task<SCreateRun> CreateRun(SClientAuthorization authorization, SCreateRunBody body)
             {
-                RestRequest req = new RestRequest("/dreambooth/run");
-                AddAuthHeaders(authorization, ref req);
+                RestRequest req = new RestRequest("/dreambooth/run") {Method = Method.Post};
                 req.AddBody(body);
-                return await Client.PostAsync<SCreateRun>(req);
+                return (SCreateRun) (await MakeRequest<SCreateRun, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
             }
 
             #region structs
@@ -680,17 +654,16 @@ public static class API
             /// <param name="cursor">Starting cursor</param>
             /// <param name="sort">The sort direction. Enum: ascending, descending</param>
             /// <returns></returns>
-            public static async Task<SGetProjects> GetProjects(SClientAuthorization authorization, string cursor,
+            public static async Task<List<SGetProjects>> GetProjects(SClientAuthorization authorization, string cursor,
                 string sort = "descending")
             {
                 if (sort != "descending" || sort != "ascending")
                     throw new ArgumentException("Sort can only be either ascending or descending");
                 RestRequest req = new RestRequest("/texture-mesh/projects");
-                AddAuthHeaders(authorization, ref req);
-
                 if (cursor != String.Empty) req.AddQueryParameter("cursor", cursor);
                 req.AddQueryParameter("sort", sort.ToString().ToLower());
-                return await Client.GetAsync<SGetProjects>(req);
+                
+                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SDefaultError>(req, authorization))! ?? throw new InvalidOperationException();
             }
 
             /// <summary>
@@ -1065,6 +1038,15 @@ public static class API
             {
                 ApiKey = apiKey;
                 AuthorizationToken = authToken;
+            }
+            
+            /// <summary>
+            /// Creates a dummy Client Authorization that will fail on all auth requests
+            /// </summary>
+            public SClientAuthorization()
+            {
+                ApiKey = "VOID";
+                AuthorizationToken = "VOID";
             }
         }
 
