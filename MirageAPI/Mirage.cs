@@ -10,7 +10,7 @@ namespace Mirage;
 
 public static class API
 {
-    private static RestClient _client = new RestClient("https://api.mirageml.com/");
+    private static readonly RestClient Client = new RestClient("https://api.mirageml.com/");
 
     public static class Public
     {
@@ -27,7 +27,7 @@ public static class API
             if (page != String.Empty) req.AddQueryParameter("page", page);
             if (filter != String.Empty) req.AddQueryParameter("filter", filter);
             if (projectId != String.Empty) req.AddQueryParameter("projectID", projectId);
-            var res = await _client.GetAsync<SPublicDataset>(req);
+            var res = await Client.GetAsync<SPublicDataset>(req);
             return res;
         }
 
@@ -39,7 +39,7 @@ public static class API
         {
             RestRequest req = new RestRequest("/texture-mesh/public-projects");
             if (page != String.Empty) req.AddQueryParameter("page", page);
-            var res = await _client.GetAsync<RGetPublicProjects>(req);
+            var res = await Client.GetAsync<RGetPublicProjects>(req);
             return res;
         }
 
@@ -142,12 +142,14 @@ public static class API
             /// <param name="authKey">Authorization Key</param>
             /// <param name="apiKey">x-api-key</param>
             /// <exception cref="ArgumentException">Throws if either keys are empty or null</exception>
-            public static async Task<SGetProjects> GetProjects(SClientAuthorization authorization)
+            public static async Task<List<SGetProjects>> GetProjects(SClientAuthorization authorization)
             {
-                RestRequest req = new RestRequest("/stable-diffusion/projects");
-                AddAuthHeaders(authorization, ref req);
+                RestRequest req = new RestRequest("/stable-diffusion/projects")
+                {
+                    Method = Method.Get
+                };
 
-                return await _client.GetAsync<SGetProjects>(req);
+                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
@@ -160,10 +162,9 @@ public static class API
             public static async Task<SGetProject> GetProject(SClientAuthorization authorization, string projectId)
             {
                 if (projectId == String.Empty) throw new ArgumentException("projectId cannot be empty!");
-                RestRequest req = new RestRequest("/stable-diffusion/project");
-                AddAuthHeaders(authorization, ref req);
-                req.AddQueryParameter("projectId", projectId);
-                return await _client.GetAsync<SGetProject>(req);
+                RestRequest req = new RestRequest("/stable-diffusion/project") { Method = Method.Get };
+                req.AddQueryParameter("project-id", projectId);
+                return (SGetProject) (await MakeRequest<SGetProject, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
@@ -173,9 +174,8 @@ public static class API
             /// <returns>Completed request</returns>
             public static async Task<SCreateProject> CreateProject(SClientAuthorization authorization)
             {
-                RestRequest req = new RestRequest("/stable-diffusion/project");
-                AddAuthHeaders(authorization, ref req);
-                return await _client.PostAsync<SCreateProject>(req);
+                RestRequest req = new RestRequest("/stable-diffusion/project") { Method = Method.Post };
+                return (SCreateProject)(await PostRequest<SCreateProject, Dreambooth.SCreateProjectError>(req, authorization) ?? throw new InvalidOperationException());
             }
 
             /// <summary>
@@ -188,9 +188,10 @@ public static class API
             {
                 if (runId == String.Empty) throw new ArgumentException("runId cannot be empty!");
 
-                RestRequest req = new RestRequest("/stable-diffusion/run");
-                AddAuthHeaders(authorization, ref req);
-                return await _client.GetAsync<SGetRun>(req);
+                RestRequest req = new RestRequest("/stable-diffusion/run") {Method = Method.Get};
+                req.AddParameter("run-id", runId);
+                return (SGetRun)((await MakeRequest<SGetRun, SDefaultError>(req, authorization)) ??
+                                 throw new InvalidOperationException());
             }
 
             /// <summary>
@@ -205,9 +206,9 @@ public static class API
                 if (body.Equals(null)) throw new ArgumentException("Body cannot be null!");
 
                 RestRequest req = new RestRequest("/stable-diffusion/run");
-                AddAuthHeaders(authorization, ref req);
                 req.AddBody(body);
-                return await _client.PostAsync<SCreateRun>(req);
+                
+                return (SCreateRun) (await MakeRequest<SCreateRun, SDefaultError>(req, authorization) ?? throw new InvalidOperationException());
             }
 
 
@@ -321,19 +322,16 @@ public static class API
 
         public static class Dreambooth
         {
+
             /// <summary>
             /// Returns an array of the dreambooth projects
             /// </summary>
             /// <param name="authorization">Authorization for the client</param>
             /// <returns></returns>
-            public static async Task<List<SGetProjects>> GetProjects(SClientAuthorization authorization)
+            public static async Task<List<SGetProjects>?> GetProjects(SClientAuthorization authorization)
             {
                 RestRequest req = new RestRequest("/dreambooth/projects");
-                AddAuthHeaders(authorization, ref req);
-                req.AddHeader("accept", "application/json");
-                var res = await _client.GetAsync<List<SGetProjects>>(req);
-                Debug.Assert(res != null, nameof(res) + " != null");
-                return res;
+                return (List<SGetProjects>) (await MakeRequest<List<SGetProjects>, SGetProjects>(req, authorization))!;
             }
 
             /// <summary>
@@ -343,13 +341,32 @@ public static class API
             /// <param name="projectId">Project ID to get</param>
             /// <returns>Completed request</returns>
             /// <exception cref="ArgumentException">Throws if project is null or empty</exception>
-            public static async Task<SGetProject> GetProject(SClientAuthorization authorization, string projectId)
+            public static async Task<SGetProject?> GetProject(SClientAuthorization authorization, string projectId)
             {
                 if (projectId == String.Empty) throw new ArgumentException("Project Id cannot be null or empty!");
                 RestRequest req = new RestRequest("/dreambooth/project");
                 AddAuthHeaders(authorization, ref req);
                 req.AddQueryParameter("project-id", projectId);
-                return await _client.GetAsync<SGetProject>(req);
+                try
+                {
+                    var t = await Client.GetAsync(req);
+                    
+                    if (!t.IsSuccessful)
+                    {
+                        Debug.Write(t.StatusCode);
+                        return null;
+                    }
+                
+                    return JsonConvert.DeserializeObject<SGetProject>(t.Content);
+                }
+                catch (Exception e)
+                {
+                    Debug.Write(e);
+                    return null;
+                }
+
+
+                
             }
 
             /// <summary>
@@ -358,13 +375,17 @@ public static class API
             /// <param name="authorization">Authorization of the client</param>
             /// <param name="body">Body of post request</param>
             /// <returns>Completed request</returns>
-            public static async Task<SCreateProject> CreateProject(SClientAuthorization authorization,
+            public static async Task<SCreateProject?> CreateProject(SClientAuthorization authorization,
                 SCreateProjectBody body)
             {
                 RestRequest req = new RestRequest("/dreambooth/project");
-                AddAuthHeaders(authorization, ref req);
-                req.AddBody(body);
-                return await _client.PostAsync<SCreateProject>(req);
+                AddAuthHeaders(authorization, ref req); 
+                body.AddDataToRequest(ref req);
+
+
+               var d = (SCreateProject) (await PostRequest<SCreateProject, SCreateProjectError>(req, authorization) ?? throw new InvalidOperationException());
+               if (d.StatusCode == 500) throw new InvalidOperationException("Request returned a 500 error!" + d.Body);
+               return d;
             }
 
             /// <summary>
@@ -380,7 +401,7 @@ public static class API
                 AddAuthHeaders(authorization, ref req);
 
                 req.AddQueryParameter("run-id", runId);
-                return await _client.GetAsync<SGetRun>(req);
+                return await Client.GetAsync<SGetRun>(req);
             }
 
             /// <summary>
@@ -394,7 +415,7 @@ public static class API
                 RestRequest req = new RestRequest("/dreambooth/run");
                 AddAuthHeaders(authorization, ref req);
                 req.AddBody(body);
-                return await _client.PostAsync<SCreateRun>(req);
+                return await Client.PostAsync<SCreateRun>(req);
             }
 
             #region structs
@@ -494,15 +515,55 @@ public static class API
 
                 [JsonProperty("train-iterations")]
                 [JsonPropertyName("train-iterations")]
-                public string TrainIterations { get; set; }
+                public int TrainIterations { get; set; }
+                
+                [JsonProperty("square-func")]
+                [JsonPropertyName("square-func")]
+                public string SquareFunc { get; set; }
+
+                [JsonProperty("prior-preservation")]
+                [JsonPropertyName("prior-preservation")]
+                public bool PriorPreservation { get; set; }
+                
+                [JsonProperty("safety-filter")]
+                [JsonPropertyName("safety-filter")]
+                public bool SafetyFilter { get; set; }
 
                 [JsonProperty("links")]
                 [JsonPropertyName("links")]
-                public string Links { get; set; }
+                public string? Links { get; set; }
 
                 [JsonProperty("files")]
                 [JsonPropertyName("files")]
-                public FileStream[] Files { get; set; }
+                public FileStream[]? Files { get; set; }
+
+                public SCreateProjectBody(string initWord, string squareFunc = "expand", bool priorPreservation = false, bool safetyFilter = false,  int trainIterations = 800, string? links = null,
+                    FileStream[]? files = null)
+                {
+                    InitWord = initWord ?? throw new ArgumentNullException(nameof(initWord));
+                    TrainIterations = trainIterations;
+                        
+                    if (squareFunc != "expand" || squareFunc != "crop" || squareFunc != "square")
+                        throw new ArgumentException("squareFunc must be either expand, crop, or square!");
+                    else SquareFunc = squareFunc;
+                    
+                    PriorPreservation = priorPreservation;
+                    SafetyFilter = safetyFilter;
+                    Links = links;
+                    Files = files;
+                }
+
+                public void AddDataToRequest(ref RestRequest request)
+                {
+                    request.AddHeader("Content-Type", "multipart/form-data");
+                    request.AddParameter("init-word", InitWord);
+                    request.AddParameter("train-iterations", TrainIterations);
+                    request.AddParameter("prior-preservation", PriorPreservation);
+                    request.AddParameter("safety-filter", SafetyFilter);
+                    request.AddParameter("square-func", SquareFunc);
+                    //(Files != null) request.AddParameter("files", Files);
+                    if(Links != null) request.AddParameter("links", Links);
+                }
             }
 
             public struct SCreateProject
@@ -515,8 +576,20 @@ public static class API
 
                 [JsonProperty("uploadedFileLength")] [JsonPropertyName("uploadedFileLength")]
                 public int UploadedFileLength;
+                
+                                
+                [JsonProperty("body")] [JsonPropertyName("body")]
+                public string Body;
             }
 
+            public struct SCreateProjectError
+            {
+                [JsonProperty("statusCode")] [JsonPropertyName("statusCode")]
+                public int StatusCode;
+                
+                [JsonProperty("body")] [JsonPropertyName("body")]
+                public string Body;
+            }
             public struct SGetRun
             {
                 [JsonProperty("id")] [JsonPropertyName("id")]
@@ -617,7 +690,7 @@ public static class API
 
                 if (cursor != String.Empty) req.AddQueryParameter("cursor", cursor);
                 req.AddQueryParameter("sort", sort.ToString().ToLower());
-                return await _client.GetAsync<SGetProjects>(req);
+                return await Client.GetAsync<SGetProjects>(req);
             }
 
             /// <summary>
@@ -632,7 +705,7 @@ public static class API
                 AddAuthHeaders(authorization, ref req);
                 req.AddQueryParameter("project-id", projectId);
 
-                return await _client.GetAsync<SGetProject>(req);
+                return await Client.GetAsync<SGetProject>(req);
             }
 
             /// <summary>
@@ -647,7 +720,7 @@ public static class API
                 RestRequest req = new RestRequest("/texture-mesh/project/create");
                 AddAuthHeaders(authorization, ref req);
                 req.AddBody(prompt);
-                return await _client.PostAsync<SCreateProject>(req);
+                return await Client.PostAsync<SCreateProject>(req);
             }
 
             /// <summary>
@@ -662,7 +735,7 @@ public static class API
                 RestRequest req = new RestRequest("/texture-mesh/project/upload");
                 AddAuthHeaders(authorization, ref req);
                 req.AddBody(body);
-                return await _client.PostAsync<SCreateProject>(req);
+                return await Client.PostAsync<SCreateProject>(req);
             }
 
             /// <summary>
@@ -676,7 +749,7 @@ public static class API
                 RestRequest req = new RestRequest("/texture-mesh/run");
                 AddAuthHeaders(authorization, ref req);
                 req.AddQueryParameter("run-id", runId);
-                return await _client.GetAsync<SGetRun>(req);
+                return await Client.GetAsync<SGetRun>(req);
             }
 
             /// <summary>
@@ -690,7 +763,7 @@ public static class API
                 RestRequest req = new RestRequest("/texture-mesh/run");
                 AddAuthHeaders(authorization, ref req);
                 req.AddBody(body);
-                return await _client.PostAsync<SCreateRun>(req);
+                return await Client.PostAsync<SCreateRun>(req);
             }
 
             #region structs
@@ -977,36 +1050,9 @@ public static class API
         {
             RestRequest req = new RestRequest("/dreambooth/projects");
             AddAuthHeaders(authorization, ref req);
-            return (await _client.GetAsync(req)).StatusCode == HttpStatusCode.OK;
+            return (await Client.GetAsync(req)).StatusCode == HttpStatusCode.OK;
         }
 
-        /// <summary>
-        /// Checks the auth key and api key to make sure they are not null or empty.
-        /// </summary>
-        /// <param name="authorization">Authorization for client</param>
-        /// <exception cref="ArgumentException">Throws if any inputs are invalid</exception>
-        private static void CheckInputs(SClientAuthorization authorization)
-        {
-            if (authorization.AuthorizationToken == String.Empty)
-                throw new ArgumentException("Authorization key is empty!");
-            if (authorization.ApiKey == String.Empty) throw new ArgumentException("api key is empty!");
-        }
-
-        /// <summary>
-        /// Adds the authorization headers to the entered request. Calls the CheckInputs() Method
-        /// </summary>
-        /// <param name="authorization">Authorization of client</param>
-        /// <param name="req">Ref to the RestRequest. May not be null</param>
-        /// <exception cref="ArgumentException">Is thrown if any of the inputs are empty or null</exception>
-        private static void AddAuthHeaders(SClientAuthorization authorization, ref RestRequest req)
-        {
-            CheckInputs(authorization);
-            req.AddHeaders(new List<KeyValuePair<string, string>>()
-            {
-                new("Authorization", authorization.AuthorizationToken),
-                new("x-api-key", authorization.ApiKey),
-            });
-        }
 
         #region Structs
 
@@ -1026,22 +1072,116 @@ public static class API
     }
 
 
-    //TODO: finish helper method
-    // private static async Task<T> GetRequestAndAttemptParse<T>(RestRequest req)
-    // {
-    //     var res = await _client.GetAsync(req);
-    //     if (res.StatusCode != HttpStatusCode.Accepted || res.StatusCode != HttpStatusCode.OK)
-    //     {
-    //         
-    //     }
-    // }
+    /// <summary>
+    /// Attempts to parse the content of the request into type T, if the request fails, then it returns a object of type E
+    /// </summary>
+    /// <param name="res"></param>
+    /// <param name="success">Is true if the parse was successful, otherwise returns false</param>
+    /// <typeparam name="T">Object if request was successful</typeparam>
+    /// <typeparam name="E">Error object</typeparam>
+    /// <returns></returns>
+    private static object? AttemptParse<T, E>(RestResponse res, out bool success)
+    {
+        success = false;
+        if (res.StatusCode != HttpStatusCode.Accepted || res.StatusCode != HttpStatusCode.OK)
+        {
+            if(res.Content == null) return null; //Request failed and has no content which should never happen but we check it anyway
+            
+            try
+            {
+                if (res.Content.Contains("errorType")) throw new HttpRequestException("Http request has error field!");
+                var obj = JsonConvert.DeserializeObject<T>(res.Content);
+                
+                success = true;
+                return obj;
+            }
+            catch (Exception e)
+            {
+                throw new HttpRequestException("HTTP request failed!" + res.Content);
+            }
+        }
+
+        return null;
+    }
+
+    #region Request Helpers
+    private static async Task<object?> MakeRequest<T, E>(RestRequest req,
+        Private.SClientAuthorization clientAuthorization)
+    {
+        AddAuthHeaders(clientAuthorization, ref req);
+        req.AddHeader("accept", "application/json");
+
+        var s = await Client.ExecuteAsync(req, CancellationToken.None);
+
+        if (s.StatusCode != HttpStatusCode.OK)
+            throw new HttpRequestException("Request failed with a status code BadRequest" + s.Content);
+        
+        var d = AttemptParse<T, E>(s, out bool success);
+
+        if (d == null) return null;
+                
+        if (success) return (T)d;
+
+        return null; 
+    }
+    
+    
+    private static async Task<object?> PostRequest<T, E>(RestRequest req, Private.SClientAuthorization clientAuthorization)
+    {
+        AddAuthHeaders(clientAuthorization, ref req);
+        req.AddHeader("accept", "application/json");
+        
+        var r = await Client.PostAsync(req);
+        var d = AttemptParse<T, E>(r, out bool success);
+
+        if (d == null) return null;
+                
+        if (success) return (T)d;
+
+        return null; 
+    }
+    
+    #endregion
+    
+    
+    
+    /// <summary>
+    /// Checks the auth key and api key to make sure they are not null or empty.
+    /// </summary>
+    /// <param name="authorization">Authorization for client</param>
+    /// <exception cref="ArgumentException">Throws if any inputs are invalid</exception>
+    private static void CheckInputs(Private.SClientAuthorization authorization)
+    {
+        if (authorization.AuthorizationToken == String.Empty)
+            throw new ArgumentException("Authorization key is empty!");
+        if (authorization.ApiKey == String.Empty) throw new ArgumentException("api key is empty!");
+    }
+
+    /// <summary>
+    /// Adds the authorization headers to the entered request. Calls the CheckInputs() Method
+    /// </summary>
+    /// <param name="authorization">Authorization of client</param>
+    /// <param name="req">Ref to the RestRequest. May not be null</param>
+    /// <exception cref="ArgumentException">Is thrown if any of the inputs are empty or null</exception>
+    private static void AddAuthHeaders(Private.SClientAuthorization authorization, ref RestRequest req)
+    {
+        CheckInputs(authorization);
+        req.AddHeaders(new List<KeyValuePair<string, string>>()
+        {
+            new("Authorization", authorization.AuthorizationToken),
+            new("x-api-key", authorization.ApiKey),
+        });
+    }
+
+
+    public struct SDefaultError
+    {
+        [JsonProperty("statusCode")] [JsonPropertyName("statusCode")]
+        public int StatusCode;
+                
+        [JsonProperty("body")] [JsonPropertyName("body")]
+        public string Body;
+    }
+
 }
 
-#if DEBUG
-public class Class
-{
-    public static void Main(string[] args)
-    {
-    }
-}
-#endif
